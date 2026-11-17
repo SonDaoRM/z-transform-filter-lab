@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Z-Transform Audio Filter Lab</title>
+<style>
+  :root{
+    --ink:#111; --muted:#555; --line:#d8d8d8; --accent:#1d4ed8; --accent-ink:#fff;
+    --panel:#f7f7f7; --good:#0a7d2c;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0; background:#fff; color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.45; font-size:16px;
+  }
+  .wrap{max-width:960px; margin:0 auto; padding:16px 16px 96px;}
+  h1{font-size:24px; margin:8px 0 2px;}
+  h2{font-size:18px; margin:0 0 8px; display:flex; align-items:center; gap:8px;}
+  .sub{color:var(--muted); font-size:14px; margin:0 0 16px;}
+  .stepnum{display:inline-flex; align-items:center; justify-content:center; min-width:26px; height:26px;
+    border-radius:50%; background:var(--ink); color:#fff; font-size:14px; font-weight:700;}
+  section{border:1px solid var(--line); border-radius:12px; padding:14px; margin:14px 0; background:#fff;}
+  .hint{color:var(--muted); font-size:14px; margin:6px 0;}
+  .row{display:flex; flex-wrap:wrap; gap:10px; align-items:center;}
+  button{
+    font:inherit; cursor:pointer; border-radius:10px; border:2px solid var(--ink);
+    background:#fff; color:var(--ink); padding:10px 16px; min-height:46px; font-weight:600;
+    touch-action:manipulation; user-select:none;
+  }
+  button:active{transform:translateY(1px);}
+  button.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+  button.primary.playing{background:#b91c1c; border-color:#b91c1c;}
+  button.choice.on{background:var(--ink); color:#fff;}
+  .seg{display:flex; flex-wrap:wrap; gap:8px;}
+  .slider-block{margin:12px 0 4px;}
+  .slider-block label{display:flex; justify-content:space-between; font-weight:600; font-size:15px; margin-bottom:6px;}
+  .slider-block output{font-variant-numeric:tabular-nums; color:var(--muted); font-weight:600;}
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:34px; background:transparent; margin:0; touch-action:pan-y;}
+  input[type=range]::-webkit-slider-runnable-track{height:8px; border-radius:4px; background:#e2e2e2; border:1px solid #c9c9c9;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:30px; height:30px; border-radius:50%;
+    background:var(--accent); border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.35); margin-top:-12px;}
+  input[type=range]::-moz-range-track{height:8px; border-radius:4px; background:#e2e2e2; border:1px solid #c9c9c9;}
+  input[type=range]::-moz-range-thumb{width:28px; height:28px; border-radius:50%; background:var(--accent); border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.35);}
+  canvas{display:block; width:100%; background:#fff; border:1px solid var(--line); border-radius:8px;}
+  .wave{height:96px;}
+  .cap{font-size:13px; color:var(--muted); margin:6px 0 0;}
+  .eq{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+    font-family:"Times New Roman",Georgia,serif; font-size:18px; margin:8px 0; overflow-x:auto;}
+  .eq i{font-style:italic;}
+  .note{background:#fdf6e3; border:1px solid #ead9a0; border-radius:8px; padding:10px 12px; font-size:14px; margin:8px 0;}
+  .grid2{display:grid; grid-template-columns:1fr; gap:14px;}
+  @media (min-width:760px){
+    .grid2{grid-template-columns:1fr 1fr;}
+    h1{font-size:28px;}
+  }
+  .metric{font-size:14px; font-weight:600;}
+  .metric.good{color:var(--good);}
+  #footerbar{display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:4px 16px; margin:18px 16px 4px;}
+  #visitstats{font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:2px 16px;}
+  #visitstats b{font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums;}
+  #credit{font-size:12px; color:var(--muted); text-align:right; margin-left:auto;}
+  #selftest{position:fixed; left:0; top:0; right:0; max-height:60vh; overflow:auto; background:#fff; color:#000;
+    font:12px/1.4 monospace; z-index:99; border-bottom:3px solid #000; margin:0; padding:8px; white-space:pre-wrap; display:none;}
+  noscript div{margin:16px; padding:12px; border:2px solid #b91c1c; border-radius:8px; color:#b91c1c; font-weight:600;}
+</style>
+</head>
+<body>
+<noscript><div>This interactive lab needs JavaScript. Please open it in a browser with scripts enabled (on iPhone, open it in Safari).</div></noscript>
+<pre id="selftest"></pre>
+<div class="wrap">
+  <h1>Z-Transform Audio Filter Lab</h1>
+  <p class="sub">Hear how digital filters clean up a noisy signal, and see the filter's z-plane and frequency response. Featuring Baby Shark.</p>
+
+  <section id="sec1">
+    <h2><span class="stepnum">1</span>The clean signal</h2>
+    <p class="hint">A short melody, sampled at 22,050 samples per second. Each note is a sine wave with a gentle second harmonic.</p>
+    <canvas id="cvClean" class="wave" aria-label="Clean signal waveform"></canvas>
+    <p class="cap">Clean melody x[n]</p>
+    <div class="row" style="margin-top:10px;">
+      <button class="primary" id="btnClean" type="button">&#9654; Play clean</button>
+    </div>
+  </section>
+
+  <section id="sec2">
+    <h2><span class="stepnum">2</span>Add noise</h2>
+    <p class="hint">Real recordings are never clean. Pick a noise type and level, then listen.</p>
+    <div class="seg" role="group" aria-label="Noise type">
+      <button class="choice on" id="noiseHiss" type="button">Hiss (white noise)</button>
+      <button class="choice" id="noiseCrackle" type="button">Crackle (spikes)</button>
+    </div>
+    <div class="slider-block">
+      <label for="slNoise">Noise level <output id="outNoise">0.30</output></label>
+      <input type="range" id="slNoise" min="0" max="0.6" step="0.05" value="0.3">
+    </div>
+    <canvas id="cvNoisy" class="wave" aria-label="Noisy signal waveform"></canvas>
+    <p class="cap">Noisy signal (gray = clean, for comparison)</p>
+    <div class="row" style="margin-top:10px;">
+      <button class="primary" id="btnNoisy" type="button">&#9654; Play noisy</button>
+    </div>
+  </section>
+
+  <section id="sec3">
+    <h2><span class="stepnum">3</span>Design the filter</h2>
+    <div class="seg" role="group" aria-label="Filter type">
+      <button class="choice on" id="fMA" type="button">Moving average (FIR)</button>
+      <button class="choice" id="fEMA" type="button">Exponential (IIR)</button>
+      <button class="choice" id="fMed" type="button">Median (non-linear)</button>
+    </div>
+    <div class="slider-block">
+      <label for="slStrength">Filter strength <output id="outStrength"></output></label>
+      <input type="range" id="slStrength" min="0" max="1" step="0.05" value="0.5">
+    </div>
+    <p class="hint" id="strengthHint"></p>
+
+    <div id="eqBlock">
+      <div class="eq" id="eqDiff"></div>
+      <div class="eq" id="eqZ"></div>
+      <p class="hint" id="eqNote"></p>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <canvas id="cvZ" style="height:240px;" aria-label="Pole-zero plot"></canvas>
+        <p class="cap">z-plane: poles (&times;) and zeros (&#9675;). A filter is stable when every pole lies inside the unit circle.</p>
+      </div>
+      <div>
+        <canvas id="cvMag" style="height:240px;" aria-label="Magnitude response"></canvas>
+        <p class="cap" id="magCap">Magnitude response |H(e^{j&omega;})| vs frequency.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="sec4">
+    <h2><span class="stepnum">4</span>Hear the result</h2>
+    <canvas id="cvFilt" class="wave" aria-label="Filtered signal waveform"></canvas>
+    <p class="cap">Filtered output y[n] (gray = clean target)</p>
+    <div class="row" style="margin-top:10px;">
+      <button class="primary" id="btnFilt" type="button">&#9654; Play filtered</button>
+      <button id="btnStop" type="button">&#9632; Stop</button>
+    </div>
+    <p class="metric" id="metric" style="margin:12px 0 0;"></p>
+    <div class="note" id="takeaway"></div>
+  </section>
+</div>
+<div id="footerbar">
+  <div id="visitstats">
+    <span>Number of visits: <b id="visitCount">1</b></span>
+    <span>Time on site: <b id="timeOnSite">0:00</b></span>
+  </div>
+  <div id="credit">Developed by SonDaoVT, PhD</div>
+</div>
+
+<script>
+"use strict";
+/* ---------------- Signal generation ---------------- */
+var FS = 22050;
+var MELODY = [
+  ["D4",.15],["E4",.15],["G4",.15],["G4",.15],["G4",.15],["G4",.15],["G4",.15],["G4",.20],
+  ["D4",.15],["E4",.15],["G4",.15],["G4",.15],["G4",.15],["G4",.15],["G4",.15],["G4",.20],
+  ["D4",.15],["E4",.15],["G4",.15],["G4",.15],["G4",.15],["G4",.15],["G4",.15],["G4",.30],
+  ["D4",.20],["E4",.20],["G4",.40]
+];
+var FREQ = {C4:261.63, D4:293.66, E4:329.63, F4:349.23, G4:392.0, A4:440.0, B4:493.88};
+var TEMPO = 1.3;
+
+var _seed = 123456789;
+function rnd(){ _seed = (_seed * 1664525 + 1013904223) >>> 0; return _seed / 4294967296; }
+
+var cleanBuf = null, len = 0;
+function synthClean(){
+  if (cleanBuf) return cleanBuf;
+  var total = 0, i;
+  for (i=0;i<MELODY.length;i++) total += MELODY[i][1]*TEMPO;
+  len = Math.floor(FS*total);
+  var out = new Float32Array(len), p = 0;
+  for (i=0;i<MELODY.length;i++){
+    var f = FREQ[MELODY[i][0]], n = Math.floor(FS*MELODY[i][1]*TEMPO);
+    for (var j=0;j<n && p<len;j++,p++){
+      var t = j/FS, I = j/n;
+      var v = Math.sin(2*Math.PI*f*t)*0.5 + Math.sin(2*Math.PI*f*2*t)*0.15;
+      var env = I<0.05 ? I/0.05 : (I>0.9 ? (1-I)/0.1 : 1);
+      out[p] = v*env*0.4;
+    }
+  }
+  cleanBuf = out;
+  return out;
+}
+
+var state = { noise:0.3, noiseType:'hiss', strength:0.5, filter:'ma' };
+var noisyBuf = null;
+
+function synthNoisy(){
+  var c = synthClean(), out = new Float32Array(c.length);
+  _seed = 987654321; // fixed seed: same noise realisation for a given setting
+  for (var i=0;i<c.length;i++){
+    var v = c[i];
+    if (state.noiseType === 'hiss'){
+      v += (rnd()*2-1) * state.noise;
+    } else {
+      if (rnd() < 0.002 + state.noise*0.006) v += (rnd()*2-1) * (0.5 + state.noise*1.3);
+    }
+    noisyBuf = out; out[i] = v;
+  }
+  return out;
+}
+
+/* ---------------- Filters ---------------- */
+function filtParams(){
+  var s = state.strength;
+  if (state.filter==='ma')  return { k: Math.floor(s*20)+1 };            // N = k+1 taps
+  if (state.filter==='ema') return { a: 0.1 + s*0.4 };                    // alpha
+  return { w: 2*Math.floor(s*8)+3 };                                      // odd window 3..19
+}
+function applyFilter(x){
+  var P = filtParams(), y = new Float32Array(x.length), i, j;
+  if (state.filter==='ma'){
+    var N = P.k+1, acc = 0;
+    for (i=0;i<x.length;i++){
+      acc += x[i];
+      if (i>=N) acc -= x[i-N];
+      y[i] = acc / Math.min(i+1, N);
+    }
+  } else if (state.filter==='ema'){
+    var a = P.a; y[0] = x[0];
+    for (i=1;i<x.length;i++) y[i] = a*x[i] + (1-a)*y[i-1];
+  } else {
+    var w = P.w, h = Math.floor(w/2), win = new Array(w);
+    for (i=0;i<x.length;i++){
+      var m = 0;
+      for (j=0;j<w;j++){
+        var idx = i - h + j;
+        win[m++] = (idx>=0 && idx<x.length) ? x[idx] : x[i];
+      }
+      win.sort(function(p,q){return p-q;});
+      y[i] = win[Math.floor(m/2)];
+    }
+  }
+  return y;
+}
+
+/* ---------------- DSP for plots ---------------- */
+function magResponse(w){ // |H(e^{jw})|, w in rad/sample
+  if (state.filter==='ma'){
+    var N = filtParams().k+1;
+    if (w < 1e-9) return 1;
+    return Math.abs(Math.sin(w*N/2)/(N*Math.sin(w/2)));
+  }
+  if (state.filter==='ema'){
+    var a = filtParams().a, c = Math.cos(w), s = Math.sin(w);
+    var dr = 1-(1-a)*c, di = (1-a)*s;
+    return a/Math.sqrt(dr*dr+di*di);
+  }
+  return NaN; // median: no frequency response
+}
+function maZeros(){ // zeros of 1+z^-1+...+z^-k : on unit circle at 2*pi*m/(k+1), m=1..k
+  var k = filtParams().k, zs = [];
+  for (var m=1;m<=k;m++){ var th = 2*Math.PI*m/(k+1); zs.push([Math.cos(th), Math.sin(th)]); }
+  return zs;
+}
+
+/* ---------------- Drawing ---------------- */
+function fitCanvas(cv){
+  var dpr = window.devicePixelRatio || 1;
+  var r = cv.getBoundingClientRect();
+  var W = Math.max(50, Math.round(r.width*dpr)), H = Math.max(50, Math.round(r.height*dpr));
+  if (cv.width!==W || cv.height!==H){ cv.width=W; cv.height=H; }
+  return [cv.getContext('2d'), W, H, dpr];
+}
+function drawWave(cv, main, overlay, frac){
+  var f = fitCanvas(cv), g=f[0], W=f[1], H=f[2];
+  g.clearRect(0,0,W,H);
+  var mid = H/2, amp = H*0.44;
+  function trace(data, color, width){
+    g.strokeStyle = color; g.lineWidth = width; g.beginPath();
+    var cols = W, per = data.length/cols;
+    for (var x=0;x<cols;x++){
+      var lo = Math.floor(x*per), hi = Math.min(data.length, Math.floor((x+1)*per));
+      var mn=1e9, mx=-1e9;
+      for (var i=lo;i<hi;i++){ var v=data[i]; if(v<mn)mn=v; if(v>mx)mx=v; }
+      if (mn>mx){ mn=0; mx=0; }
+      g.moveTo(x+0.5, mid - mx*amp);
+      g.lineTo(x+0.5, mid - mn*amp);
+    }
+    g.stroke();
+  }
+  if (overlay) trace(overlay, 'rgba(0,0,0,0.22)', 1);
+  trace(main, '#1d4ed8', 1.4);
+  g.strokeStyle='#e5e5e5'; g.lineWidth=1;
+  g.beginPath(); g.moveTo(0,mid+0.5); g.lineTo(W,mid+0.5); g.stroke();
+  if (typeof frac === 'number' && frac>=0 && frac<=1){
+    g.strokeStyle='#b91c1c'; g.lineWidth=2;
+    g.beginPath(); g.moveTo(frac*W+0.5,0); g.lineTo(frac*W+0.5,H); g.stroke();
+  }
+}
+function drawZPlane(){
+  var cv = document.getElementById('cvZ'), f = fitCanvas(cv), g=f[0], W=f[1], H=f[2];
+  g.clearRect(0,0,W,H);
+  g.font = (12*(window.devicePixelRatio||1))+'px sans-serif';
+  if (state.filter==='med'){
+    g.fillStyle='#111'; g.textAlign='center';
+    var u = window.devicePixelRatio||1;
+    g.fillText('No z-plane for the median filter:', W/2, H/2 - 8*u);
+    g.fillText('it is non-linear, so H(z) does not exist.', W/2, H/2 + 12*u);
+    return;
+  }
+  var cx=W/2, cy=H/2, R=Math.min(W,H)*0.38;
+  // axes
+  g.strokeStyle='#ccc'; g.lineWidth=1;
+  g.beginPath(); g.moveTo(0,cy+0.5); g.lineTo(W,cy+0.5); g.moveTo(cx+0.5,0); g.lineTo(cx+0.5,H); g.stroke();
+  // unit circle
+  g.strokeStyle='#111'; g.lineWidth=1.5;
+  g.beginPath(); g.arc(cx,cy,R,0,2*Math.PI); g.stroke();
+  var u2 = window.devicePixelRatio||1;
+  g.fillStyle='#777'; g.textAlign='left';
+  g.fillText('Re(z)', W-44*u2, cy-6*u2);
+  g.fillText('Im(z)', cx+6*u2, 12*u2);
+  g.fillText('1', cx+R+4*u2, cy+14*u2);
+  function zero(re,im,scale){
+    g.strokeStyle='#1d4ed8'; g.lineWidth=2*(scale||1);
+    g.beginPath(); g.arc(cx+re*R, cy-im*R, 5*u2, 0, 2*Math.PI); g.stroke();
+  }
+  function pole(re,im,scale){
+    var s=5*u2*(scale||1), X=cx+re*R, Y=cy-im*R;
+    g.strokeStyle='#b91c1c'; g.lineWidth=2;
+    g.beginPath();
+    g.moveTo(X-s,Y-s); g.lineTo(X+s,Y+s);
+    g.moveTo(X-s,Y+s); g.lineTo(X+s,Y-s);
+    g.stroke();
+  }
+  if (state.filter==='ma'){
+    var zs = maZeros(), k = filtParams().k, i;
+    for (i=0;i<zs.length;i++) zero(zs[i][0], zs[i][1]);
+    pole(0,0,1.4);
+    g.fillStyle='#b91c1c'; g.textAlign='center';
+    g.fillText(k+' poles', cx, cy+22*u2);
+    g.fillStyle='#1d4ed8';
+    g.fillText(k+' zeros', cx, cy-R-8*u2);
+  } else {
+    var a = filtParams().a;
+    pole(1-a, 0, 1.4);
+    zero(0,0,1.4);
+    g.fillStyle='#b91c1c'; g.textAlign='left';
+    g.fillText('pole at z = '+(1-a).toFixed(2), cx+(1-a)*R+8*u2, cy-8*u2);
+    g.fillStyle='#1d4ed8';
+    g.fillText('zero at z = 0', cx+8*u2, cy+18*u2);
+  }
+}
+function drawMag(){
+  var cv = document.getElementById('cvMag'), f = fitCanvas(cv), g=f[0], W=f[1], H=f[2];
+  g.clearRect(0,0,W,H);
+  var u = window.devicePixelRatio||1;
+  g.font = (12*u)+'px sans-serif';
+  var cap = document.getElementById('magCap');
+  if (state.filter==='med'){
+    g.fillStyle='#111'; g.textAlign='center';
+    g.fillText('No frequency response either.', W/2, H/2 - 8*u);
+    g.fillText('Judge it by ear: it eats spikes', W/2, H/2 + 12*u);
+    g.fillText('but keeps edges and pitch.', W/2, H/2 + 30*u);
+    cap.innerHTML = 'Magnitude response needs a linear filter.';
+    return;
+  }
+  var padL=34*u, padB=22*u, padT=10*u, padR=8*u;
+  var pw=W-padL-padR, ph=H-padT-padB;
+  // axes + gridlines at 0.5 and 1
+  g.strokeStyle='#ccc'; g.lineWidth=1;
+  [0.5,1].forEach(function(v){
+    var y=padT+ph*(1-v);
+    g.beginPath(); g.moveTo(padL,y+0.5); g.lineTo(padL+pw,y+0.5); g.stroke();
+    g.fillStyle='#777'; g.textAlign='right';
+    g.fillText(v.toFixed(1), padL-4*u, y+4*u);
+  });
+  g.strokeStyle='#111';
+  g.beginPath(); g.moveTo(padL+0.5,padT); g.lineTo(padL+0.5,padT+ph); g.lineTo(padL+pw,padT+ph+0.5); g.stroke();
+  // curve
+  g.strokeStyle='#1d4ed8'; g.lineWidth=2; g.beginPath();
+  var cutoffX=-1;
+  for (var x=0;x<=pw;x++){
+    var w = Math.PI * x/pw, m = magResponse(w);
+    var y = padT + ph*(1-Math.min(1,m));
+    if (x===0) g.moveTo(padL+x,y); else g.lineTo(padL+x,y);
+    if (cutoffX<0 && m<0.7071) cutoffX=x;
+  }
+  g.stroke();
+  // -3 dB marker
+  g.fillStyle='#0a7d2c'; g.textAlign='left';
+  var label;
+  if (cutoffX>0){
+    var fc = (cutoffX/pw)*(FS/2);
+    var y3 = padT+ph*(1-0.7071);
+    g.strokeStyle='#0a7d2c'; g.setLineDash([4,4]);
+    g.beginPath(); g.moveTo(padL+cutoffX,padT); g.lineTo(padL+cutoffX,padT+ph); g.stroke();
+    g.setLineDash([]);
+    label = 'cutoff \u2248 '+Math.round(fc)+' Hz';
+    g.fillText(label, Math.min(padL+cutoffX+4*u, W-90*u), y3-6*u);
+  }
+  g.fillStyle='#777'; g.textAlign='center';
+  g.fillText('0', padL, H-6*u);
+  g.fillText((FS/2000).toFixed(1)+' kHz (Nyquist)', padL+pw*0.72, H-6*u);
+  cap.innerHTML = 'Magnitude response |H(e<sup>j\u03C9</sup>)|: low notes pass, high hiss is cut.';
+}
+
+/* ---------------- Equations & text ---------------- */
+function updateText(){
+  var P = filtParams(), out = document.getElementById('outStrength');
+  var hint = document.getElementById('strengthHint');
+  var eqD = document.getElementById('eqDiff'), eqZ = document.getElementById('eqZ'), eqN = document.getElementById('eqNote');
+  if (state.filter==='ma'){
+    out.textContent = 'k = '+P.k+' (averages '+(P.k+1)+' samples)';
+    hint.textContent = 'Higher k = more averaging = smoother output, but more smearing of fast notes.';
+    eqD.innerHTML = '<i>y</i>[<i>n</i>] = ( <i>x</i>[<i>n</i>] + <i>x</i>[<i>n</i>\u22121] + \u2026 + <i>x</i>[<i>n</i>\u2212'+P.k+'] ) / '+(P.k+1);
+    eqZ.innerHTML = '<i>H</i>(<i>z</i>) = ( 1 + <i>z</i><sup>\u22121</sup> + <i>z</i><sup>\u22122</sup> + \u2026 + <i>z</i><sup>\u2212'+P.k+'</sup> ) / '+(P.k+1);
+    eqN.innerHTML = '<b>FIR:</b> '+P.k+' zeros on the unit circle, '+P.k+' poles at the origin. Linear phase and always stable.';
+  } else if (state.filter==='ema'){
+    out.textContent = '\u03B1 = '+P.a.toFixed(2);
+    hint.textContent = 'Smaller \u03B1 = heavier smoothing = more delay before the melody catches up.';
+    eqD.innerHTML = '<i>y</i>[<i>n</i>] = \u03B1\u00B7<i>x</i>[<i>n</i>] + (1\u2212\u03B1)\u00B7<i>y</i>[<i>n</i>\u22121]';
+    eqZ.innerHTML = '<i>H</i>(<i>z</i>) = \u03B1 / ( 1 \u2212 (1\u2212\u03B1)<i>z</i><sup>\u22121</sup> )';
+    eqN.innerHTML = '<b>IIR:</b> one pole at <i>z</i> = 1\u2212\u03B1 = '+(1-P.a).toFixed(2)+' (inside the unit circle, so stable), one zero at the origin. Cheap to compute, non-linear phase.';
+  } else {
+    out.textContent = 'window = '+P.w+' samples';
+    hint.textContent = 'Larger window = better spike removal, but may round off quick note attacks.';
+    eqD.innerHTML = '<i>y</i>[<i>n</i>] = median( <i>x</i>[<i>n</i>\u2212'+Math.floor(P.w/2)+'], \u2026, <i>x</i>[<i>n</i>], \u2026, <i>x</i>[<i>n</i>+'+Math.floor(P.w/2)+'] )';
+    eqZ.innerHTML = '<i>H</i>(<i>z</i>) does not exist \u2014 the median is non-linear';
+    eqN.innerHTML = '<b>Non-linear:</b> superb against crackle (impulse noise) because one huge sample never wins the middle. Try it on the Crackle noise.';
+  }
+}
+
+/* ---------------- Metrics ---------------- */
+function rms(a){ var s=0; for (var i=0;i<a.length;i++) s+=a[i]*a[i]; return Math.sqrt(s/a.length); }
+function updateMetric(){
+  var c = synthClean(), n = synthNoisy(), f = applyFilter(n);
+  var eN=0, eF=0, i;
+  for (i=0;i<c.length;i++){ var dN=n[i]-c[i], dF=f[i]-c[i]; eN+=dN*dN; eF+=dF*dF; }
+  eN=Math.sqrt(eN/c.length); eF=Math.sqrt(eF/c.length);
+  var red = Math.round((1-eF/eN)*100);
+  var el = document.getElementById('metric');
+  if (red >= 0){
+    el.textContent = 'Residual noise vs clean: '+eN.toFixed(3)+' \u2192 '+eF.toFixed(3)+'  ('+red+'% lower, measured on this noise)';
+    el.className = 'metric' + (red>30 ? ' good' : '');
+  } else {
+    el.textContent = 'Residual noise vs clean: '+eN.toFixed(3)+' \u2192 '+eF.toFixed(3)+'  ('+(-red)+'% HIGHER \u2014 this filter smears the spikes)';
+    el.className = 'metric';
+    el.style.color = '#b91c1c';
+  }
+  if (red >= 0) el.style.color = '';
+  var t = document.getElementById('takeaway');
+  if (state.filter==='med' && state.noiseType==='crackle')
+    t.innerHTML = '<b>What to notice:</b> the median filter ignores lone spikes entirely, because a spike is never the middle value. Linear filters smear each spike across many samples.';
+  else if (state.filter==='med')
+    t.innerHTML = '<b>What to notice:</b> it handles smooth hiss too, but its real party trick is crackle \u2014 switch the noise type to Crackle and compare with a linear filter.';
+  else if (state.noiseType==='crackle')
+    t.innerHTML = '<b>What to notice:</b> a linear filter spreads every spike into a soft thump. Switch to the Median filter and the spikes vanish.';
+  else
+    t.innerHTML = '<b>What to notice:</b> the zeros sit on the unit circle at the hiss frequencies, so |H| dips there \u2014 that is why the hiss gets quieter while the low melody passes.';
+}
+
+/* ---------------- Audio ---------------- */
+var actx = null, srcNode = null, playTimer = null, playingWhich = null;
+function ensureCtx(){
+  if (!actx){ var AC = window.AudioContext || window.webkitAudioContext; actx = new AC(); }
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+function makeBuffer(which){
+  var data;
+  if (which==='clean') data = synthClean();
+  else if (which==='noisy') data = synthNoisy();
+  else data = applyFilter(synthNoisy());
+  var b = ensureCtx().createBuffer(1, data.length, FS);
+  b.getChannelData(0).set(data);
+  return b;
+}
+var btns = {};
+function setPlayingUI(which){
+  ['clean','noisy','filt'].forEach(function(k){
+    var b = btns[k];
+    if (k===which){ b.classList.add('playing'); b.innerHTML = '\u25A0 Stop'; }
+    else {
+      b.classList.remove('playing');
+      b.innerHTML = '\u25B6 Play ' + (k==='filt'?'filtered':k);
+    }
+  });
+}
+function stopPlay(){
+  if (srcNode){ try{srcNode.stop();}catch(e){} srcNode=null; }
+  if (playTimer){ cancelAnimationFrame(playTimer); playTimer=null; }
+  playingWhich = null;
+  setPlayingUI(null);
+  renderWaves(-1);
+}
+function play(which){
+  if (playingWhich===which){ stopPlay(); return; }
+  stopPlay();
+  var ctx = ensureCtx();
+  var src = ctx.createBufferSource(), gn = ctx.createGain();
+  src.buffer = makeBuffer(which);
+  gn.gain.value = 0.7;
+  src.connect(gn); gn.connect(ctx.destination);
+  var t0 = ctx.currentTime + 0.05, dur = src.buffer.duration;
+  src.start(t0);
+  srcNode = src; playingWhich = which;
+  setPlayingUI(which);
+  src.onended = function(){ if (srcNode===src) stopPlay(); };
+  function tick(){
+    var fr = (ctx.currentTime - t0)/dur;
+    if (fr>1 || srcNode!==src){ return; }
+    renderWaves(Math.max(0,fr));
+    playTimer = requestAnimationFrame(tick);
+  }
+  tick();
+}
+
+/* ---------------- Render all ---------------- */
+function renderWaves(frac){
+  drawWave(document.getElementById('cvClean'), synthClean(), null, frac);
+  drawWave(document.getElementById('cvNoisy'), synthNoisy(), synthClean(), frac);
+  drawWave(document.getElementById('cvFilt'), applyFilter(synthNoisy()), synthClean(), frac);
+}
+function renderAll(frac){
+  renderWaves(typeof frac==='number'?frac:-1);
+  drawZPlane(); drawMag(); updateText(); updateMetric();
+}
+
+/* ---------------- Wiring ---------------- */
+function bind(){
+  btns = { clean:document.getElementById('btnClean'), noisy:document.getElementById('btnNoisy'), filt:document.getElementById('btnFilt') };
+  btns.clean.addEventListener('click', function(){ play('clean'); });
+  btns.noisy.addEventListener('click', function(){ play('noisy'); });
+  btns.filt.addEventListener('click', function(){ play('filt'); });
+  document.getElementById('btnStop').addEventListener('click', stopPlay);
+
+  var slN = document.getElementById('slNoise');
+  slN.addEventListener('input', function(){
+    state.noise = parseFloat(slN.value);
+    document.getElementById('outNoise').textContent = state.noise.toFixed(2);
+    renderAll();
+  });
+  var slS = document.getElementById('slStrength');
+  slS.addEventListener('input', function(){
+    state.strength = parseFloat(slS.value);
+    renderAll();
+  });
+  var fMA=document.getElementById('fMA'), fEMA=document.getElementById('fEMA'), fMed=document.getElementById('fMed');
+  function setFilter(name){
+    state.filter = name;
+    fMA.classList.toggle('on', name==='ma');
+    fEMA.classList.toggle('on', name==='ema');
+    fMed.classList.toggle('on', name==='med');
+    renderAll();
+  }
+  fMA.addEventListener('click', function(){ setFilter('ma'); });
+  fEMA.addEventListener('click', function(){ setFilter('ema'); });
+  fMed.addEventListener('click', function(){ setFilter('med'); });
+
+  var nH=document.getElementById('noiseHiss'), nC=document.getElementById('noiseCrackle');
+  function setNoise(t){
+    state.noiseType = t;
+    nH.classList.toggle('on', t==='hiss');
+    nC.classList.toggle('on', t==='crackle');
+    renderAll();
+  }
+  nH.addEventListener('click', function(){ setNoise('hiss'); });
+  nC.addEventListener('click', function(){ setNoise('crackle'); });
+
+  var rz;
+  window.addEventListener('resize', function(){
+    clearTimeout(rz); rz=setTimeout(function(){ renderAll(); }, 120);
+  });
+}
+
+/* ---------------- Self test (?selftest) ---------------- */
+function canvasHash(cv){
+  var g=cv.getContext('2d'), d=g.getImageData(0,0,cv.width,cv.height).data, h=0;
+  for (var i=0;i<d.length;i+=97) h=(h*31+d[i])>>>0;
+  return h;
+}
+function fire(el, type){
+  el.dispatchEvent(new Event(type, {bubbles:true}));
+}
+function selftest(){
+  var out = [], ok = true;
+  function check(name, cond){ out.push((cond?'PASS':'FAIL')+' '+name); if(!cond) ok=false; }
+  try{
+    // initial render
+    var hClean = canvasHash(document.getElementById('cvClean'));
+    check('clean waveform drawn', hClean!==0);
+
+    // filter buttons
+    document.getElementById('fEMA').click();
+    check('EMA button activates', document.getElementById('fEMA').classList.contains('on'));
+    check('EMA equation shown', document.getElementById('eqZ').textContent.indexOf('1\u2212\u03B1')>0 || document.getElementById('eqZ').textContent.indexOf('\u03B1 /')>0);
+    document.getElementById('fMed').click();
+    check('Median button activates', document.getElementById('fMed').classList.contains('on'));
+    check('Median z-plane message', document.getElementById('cvZ').width>0);
+    document.getElementById('fMA').click();
+    check('MA button activates', document.getElementById('fMA').classList.contains('on'));
+
+    // noise slider
+    var slN=document.getElementById('slNoise');
+    var h1 = canvasHash(document.getElementById('cvNoisy'));
+    slN.value='0.6'; fire(slN,'input');
+    check('noise slider label', document.getElementById('outNoise').textContent==='0.60');
+    var h2 = canvasHash(document.getElementById('cvNoisy'));
+    check('noise slider redraws waveform', h1!==h2);
+    slN.value='0.05'; fire(slN,'input');
+    check('noise slider low value', document.getElementById('outNoise').textContent==='0.05');
+    slN.value='0.3'; fire(slN,'input');
+
+    // noise type
+    document.getElementById('noiseCrackle').click();
+    check('crackle activates', document.getElementById('noiseCrackle').classList.contains('on'));
+    var h3 = canvasHash(document.getElementById('cvNoisy'));
+    check('noise type changes waveform', h3!==h2);
+
+    // strength slider (median first for window label)
+    var slS=document.getElementById('slStrength');
+    document.getElementById('fMed').click();
+    slS.value='1'; fire(slS,'input');
+    check('strength label updates', document.getElementById('outStrength').textContent.indexOf('window = 19')===0);
+    document.getElementById('fMA').click();
+    slS.value='0.05'; fire(slS,'input');
+    var z2 = canvasHash(document.getElementById('cvZ'));
+    check('z-plane redraws with strength', z2!==0);
+    check('MA k label', document.getElementById('outStrength').textContent.indexOf('k = 2')===0);
+    slS.value='0.5'; fire(slS,'input');
+
+    // audio pipeline via OfflineAudioContext
+    var OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (OAC){
+      document.getElementById('fMed').click(); // median vs crackle
+      var data = applyFilter(synthNoisy());
+      var octx = new OAC(1, data.length, FS);
+      var b = octx.createBuffer(1, data.length, FS);
+      b.getChannelData(0).set(data);
+      var s = octx.createBufferSource(); s.buffer=b; s.connect(octx.destination); s.start();
+      return octx.startRendering().then(function(rendered){
+        var r = rendered.getChannelData(0), sum=0, i;
+        for (i=0;i<r.length;i++) sum+=Math.abs(r[i]);
+        check('OfflineAudioContext rendered audio', sum>1);
+        var c=synthClean(), n=synthNoisy(), f2=data, eN=0, eF=0;
+        for (i=0;i<c.length;i++){ var dN=n[i]-c[i], dF=f2[i]-c[i]; eN+=dN*dN; eF+=dF*dF; }
+        check('median filter removes crackle spikes', Math.sqrt(eF/c.length) < Math.sqrt(eN/c.length)*0.8);
+        finish();
+      }, function(err){ check('OfflineAudioContext rendered audio', false); finish(); });
+    } else {
+      check('OfflineAudioContext available', false);
+      finish();
+    }
+  }catch(err){
+    out.push('FAIL exception: '+(err&&err.message)); ok=false;
+    finish();
+  }
+  function finish(){
+    out.push(ok ? 'SELFTEST PASS' : 'SELFTEST FAIL');
+    var pre=document.getElementById('selftest');
+    pre.textContent = out.join('\n');
+    pre.style.display='block';
+    document.title = ok ? 'SELFTEST PASS' : 'SELFTEST FAIL';
+  }
+}
+
+window.addEventListener('load', function(){
+  // optional deep-link: #filter=ema&noise=crackle&level=0.4&strength=0.7
+  var h = location.hash;
+  if (h && h.length>1){
+    var q = {};
+    h.slice(1).split('&').forEach(function(kv){ var p=kv.split('='); q[p[0]]=p[1]; });
+    if (q.filter==='ema'||q.filter==='med') state.filter=q.filter;
+    if (q.noise==='crackle') state.noiseType='crackle';
+    if (q.level && !isNaN(parseFloat(q.level))){
+      state.noise=Math.min(0.6,Math.max(0,parseFloat(q.level)));
+      document.getElementById('slNoise').value=String(state.noise);
+      document.getElementById('outNoise').textContent=state.noise.toFixed(2);
+    }
+    if (q.strength && !isNaN(parseFloat(q.strength))){
+      state.strength=Math.min(1,Math.max(0,parseFloat(q.strength)));
+      document.getElementById('slStrength').value=String(state.strength);
+    }
+    document.getElementById('fMA').classList.toggle('on', state.filter==='ma');
+    document.getElementById('fEMA').classList.toggle('on', state.filter==='ema');
+    document.getElementById('fMed').classList.toggle('on', state.filter==='med');
+    document.getElementById('noiseHiss').classList.toggle('on', state.noiseType==='hiss');
+    document.getElementById('noiseCrackle').classList.toggle('on', state.noiseType==='crackle');
+  }
+  bind();
+  renderAll();
+  initVisitStats();
+  if (/[?&]selftest/.test(location.search)) setTimeout(selftest, 300);
+});
+
+/* ---------------- Visit stats (footer) ----------------
+   Per-device visit count in localStorage (offline, no external requests)
+   and a live mm:ss timer for the current visit. */
+function initVisitStats(){
+  var countEl = document.getElementById('visitCount');
+  var timeEl = document.getElementById('timeOnSite');
+  try {
+    var key = 'ztransform_filterlab_visits';
+    var n = parseInt(localStorage.getItem(key) || '0', 10);
+    if (isNaN(n) || n < 0) n = 0;
+    n += 1;
+    localStorage.setItem(key, String(n));
+    countEl.textContent = String(n);
+  } catch (e) {
+    countEl.textContent = '1'; // storage unavailable (e.g. private mode)
+  }
+  var t0 = Date.now();
+  function tick(){
+    var s = Math.floor((Date.now() - t0) / 1000);
+    var mm = Math.floor(s / 60), ss = s % 60;
+    timeEl.textContent = mm + ':' + (ss < 10 ? '0' : '') + ss;
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+</script>
+</body>
+</html>
