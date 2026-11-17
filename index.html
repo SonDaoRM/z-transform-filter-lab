@@ -692,18 +692,17 @@ window.addEventListener('load', function(){
 });
 
 /* ---------------- Visit stats (footer) ----------------
-   GLOBAL totals shared by all visitors, via the free Abacus counter API
-   (https://abacus.jsn.cam - no API key, CORS-enabled, rate-limited per IP).
+   GLOBAL totals shared by all visitors, via the free Count API
+   (https://countapi.mileshilliard.com - no API key, CORS-enabled).
    Number of visits: one hit per browser session (sessionStorage guard).
    Time on site: every 15 seconds of accumulated visitor time is one hit on
    a "ticks" counter (1 tick = 15s). A heartbeat flushes while the tab is
    visible and a keepalive flush runs when the tab is hidden or closed.
    Display = server ticks x 15s plus this session's not-yet-sent time. */
 function initVisitStats(){
-  var API = 'https://abacus.jasoncameron.dev';
-  var NS = 'sondaorm.github.io';
-  var VISITS_KEY = 'z-transform-filter-lab-visits';
-  var TICKS_KEY = 'z-transform-filter-lab-time-15s';
+  var API = 'https://countapi.mileshilliard.com/api/v1';
+  var VISITS_KEY = 'sondaorm-z-transform-filter-lab-visits';
+  var TICKS_KEY = 'sondaorm-z-transform-filter-lab-time-15s';
   var SESSION_FLAG = 'gstats_ztransform_counted';
   var TICK_S = 15;
   var countEl = document.getElementById('visitCount');
@@ -732,8 +731,23 @@ function initVisitStats(){
     timeEl.textContent = fmt(shown);
   }
   function api(path, keepalive){
-    return fetch(API + path, keepalive ? { method: 'GET', keepalive: true } : { method: 'GET' })
-      .then(function(r){ if (!r.ok) throw new Error('http ' + r.status); return r.json(); });
+    // Retries with backoff (except keepalive calls during unload): a free
+    // counter service can drop single requests, and a visit must not be lost.
+    var maxAttempts = keepalive ? 1 : 5;
+    return new Promise(function(resolve, reject){
+      var attempt = 0;
+      function go(){
+        fetch(API + path, keepalive ? { method: 'GET', keepalive: true } : { method: 'GET' })
+          .then(function(r){ if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+          .then(function(j){ j.value = parseInt(j.value, 10) || 0; resolve(j); })
+          .catch(function(e){
+            attempt++;
+            if (attempt >= maxAttempts) reject(e);
+            else setTimeout(go, 3000 * attempt);
+          });
+      }
+      go();
+    });
   }
 
   // Visits: count once per session, always show the current global total.
@@ -742,12 +756,12 @@ function initVisitStats(){
     if (sessionStorage.getItem(SESSION_FLAG)) isNewSession = false;
     else sessionStorage.setItem(SESSION_FLAG, '1');
   } catch (e) { /* no storage: count the visit anyway */ }
-  (isNewSession ? api('/hit/' + NS + '/' + VISITS_KEY) : api('/get/' + NS + '/' + VISITS_KEY))
+  (isNewSession ? api('/hit/' + VISITS_KEY) : api('/get/' + VISITS_KEY))
     .then(function(j){ countEl.textContent = String(j.value); })
     .catch(function(){ countEl.textContent = '\u2013'; });
 
   // Time: load the global total, then accumulate while visible.
-  api('/get/' + NS + '/' + TICKS_KEY)
+  api('/get/' + TICKS_KEY)
     .then(function(j){ baseTicks = j.value | 0; render(); })
     .catch(function(){ /* offline: show this session's time only */ });
 
@@ -758,7 +772,7 @@ function initVisitStats(){
     sending = true;
     pendingMs = pending(now) - TICK_S * 1000;
     visStart = (document.visibilityState !== 'hidden') ? now : null;
-    api('/hit/' + NS + '/' + TICKS_KEY)
+    api('/hit/' + TICKS_KEY)
       .then(function(j){ baseTicks = j.value | 0; sending = false; render(); flush(); })
       .catch(function(){ sending = false; });
   }
@@ -768,7 +782,7 @@ function initVisitStats(){
     var n = Math.round(pending(Date.now()) / (TICK_S * 1000));
     pendingMs = 0; visStart = null;
     for (var i = 0; i < n; i++) {
-      api('/hit/' + NS + '/' + TICKS_KEY, true)
+      api('/hit/' + TICKS_KEY, true)
         .then(function(j){ baseTicks = j.value | 0; render(); })
         .catch(function(){});
     }
