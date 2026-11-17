@@ -692,29 +692,93 @@ window.addEventListener('load', function(){
 });
 
 /* ---------------- Visit stats (footer) ----------------
-   Per-device visit count in localStorage (offline, no external requests)
-   and a live mm:ss timer for the current visit. */
+   GLOBAL totals shared by all visitors, via the free Abacus counter API
+   (https://abacus.jsn.cam - no API key, CORS-enabled, rate-limited per IP).
+   Number of visits: one hit per browser session (sessionStorage guard).
+   Time on site: every 15 seconds of accumulated visitor time is one hit on
+   a "ticks" counter (1 tick = 15s). A heartbeat flushes while the tab is
+   visible and a keepalive flush runs when the tab is hidden or closed.
+   Display = server ticks x 15s plus this session's not-yet-sent time. */
 function initVisitStats(){
+  var API = 'https://abacus.jasoncameron.dev';
+  var NS = 'sondaorm.github.io';
+  var VISITS_KEY = 'z-transform-filter-lab-visits';
+  var TICKS_KEY = 'z-transform-filter-lab-time-15s';
+  var SESSION_FLAG = 'gstats_ztransform_counted';
+  var TICK_S = 15;
   var countEl = document.getElementById('visitCount');
   var timeEl = document.getElementById('timeOnSite');
+  var baseTicks = null;  // server-confirmed 15s ticks, null until loaded
+  var pendingMs = 0;     // ms accumulated but not yet sent
+  var visStart = (document.visibilityState !== 'hidden') ? Date.now() : null;
+  var sending = false;
+
+  function fmt(sec){
+    sec = Math.floor(sec);
+    if (sec < 60) return sec + 's';
+    var m = Math.floor(sec / 60), s = sec % 60;
+    if (m < 60) return m + 'm ' + s + 's';
+    var h = Math.floor(m / 60); m = m % 60;
+    if (h < 24) return h + 'h ' + m + 'm';
+    var d = Math.floor(h / 24); h = h % 24;
+    return d + 'd ' + h + 'h';
+  }
+  function pending(now){
+    return pendingMs + (visStart !== null ? now - visStart : 0);
+  }
+  function render(){
+    var shown = pending(Date.now()) / 1000;
+    if (baseTicks !== null) shown += baseTicks * TICK_S;
+    timeEl.textContent = fmt(shown);
+  }
+  function api(path, keepalive){
+    return fetch(API + path, keepalive ? { method: 'GET', keepalive: true } : { method: 'GET' })
+      .then(function(r){ if (!r.ok) throw new Error('http ' + r.status); return r.json(); });
+  }
+
+  // Visits: count once per session, always show the current global total.
+  var isNewSession = true;
   try {
-    var key = 'ztransform_filterlab_visits';
-    var n = parseInt(localStorage.getItem(key) || '0', 10);
-    if (isNaN(n) || n < 0) n = 0;
-    n += 1;
-    localStorage.setItem(key, String(n));
-    countEl.textContent = String(n);
-  } catch (e) {
-    countEl.textContent = '1'; // storage unavailable (e.g. private mode)
+    if (sessionStorage.getItem(SESSION_FLAG)) isNewSession = false;
+    else sessionStorage.setItem(SESSION_FLAG, '1');
+  } catch (e) { /* no storage: count the visit anyway */ }
+  (isNewSession ? api('/hit/' + NS + '/' + VISITS_KEY) : api('/get/' + NS + '/' + VISITS_KEY))
+    .then(function(j){ countEl.textContent = String(j.value); })
+    .catch(function(){ countEl.textContent = '\u2013'; });
+
+  // Time: load the global total, then accumulate while visible.
+  api('/get/' + NS + '/' + TICKS_KEY)
+    .then(function(j){ baseTicks = j.value | 0; render(); })
+    .catch(function(){ /* offline: show this session's time only */ });
+
+  function flush(){
+    if (sending) return;
+    var now = Date.now();
+    if (pending(now) < TICK_S * 1000) return;
+    sending = true;
+    pendingMs = pending(now) - TICK_S * 1000;
+    visStart = (document.visibilityState !== 'hidden') ? now : null;
+    api('/hit/' + NS + '/' + TICKS_KEY)
+      .then(function(j){ baseTicks = j.value | 0; sending = false; render(); flush(); })
+      .catch(function(){ sending = false; });
   }
-  var t0 = Date.now();
-  function tick(){
-    var s = Math.floor((Date.now() - t0) / 1000);
-    var mm = Math.floor(s / 60), ss = s % 60;
-    timeEl.textContent = mm + ':' + (ss < 10 ? '0' : '') + ss;
+  setInterval(function(){ render(); flush(); }, 1000);
+
+  function finalFlush(){
+    var n = Math.round(pending(Date.now()) / (TICK_S * 1000));
+    pendingMs = 0; visStart = null;
+    for (var i = 0; i < n; i++) {
+      api('/hit/' + NS + '/' + TICKS_KEY, true)
+        .then(function(j){ baseTicks = j.value | 0; render(); })
+        .catch(function(){});
+    }
   }
-  tick();
-  setInterval(tick, 1000);
+  document.addEventListener('visibilitychange', function(){
+    if (document.visibilityState === 'hidden') finalFlush();
+    else if (visStart === null) visStart = Date.now();
+  });
+  window.addEventListener('pagehide', finalFlush);
+  render();
 }
 </script>
 </body>
